@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Game Tài Xế Ahamove</title>
     <style>
         body {
@@ -14,217 +14,241 @@
             background-color: #f7f7f7;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             flex-direction: column;
+            padding: 10px;
+            box-sizing: border-box;
+            overflow: hidden; /* Ngăn cuộn trang trên di động */
+        }
+        .game-container {
+            width: 100%;
+            max-width: 800px; /* Kích thước tối đa của game */
         }
         #game-board {
-            border: 2px solid #AD0025; /* Màu đỏ của Ahamove */
+            border: 2px solid #AD0025;
             background-color: #fff;
             cursor: pointer;
+            width: 100%;
+            display: block; /* Loại bỏ khoảng trống thừa bên dưới canvas */
         }
         h1 {
             margin-bottom: 20px;
             color: #AD0025;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <h1>Game Tài Xế Ahamove</h1>
-    <canvas id="game-board" width="800" height="300"></canvas>
+    <div class="game-container">
+        <h1>Game Tài Xế Ahamove</h1>
+        <canvas id="game-board"></canvas>
+    </div>
 
     <script>
         const gameBoard = document.getElementById('game-board');
         const ctx = gameBoard.getContext('2d');
 
-        // --- CÀI ĐẶT HÌNH ẢNH ---
+        // --- HÌNH ẢNH ---
         const DRIVER_IMG_URL = 'https://ahamoveimg.s3-ap-southeast-1.amazonaws.com/core_services/xe1-02.png';
-
         const SERVICE_ICONS = [
             { src: 'https://ahamove-assets-staging.s3.ap-southeast-1.amazonaws.com/vehicles/truck_services/SV-VAN-500.png', points: 30, width: 70, height: 50 },
             { src: 'https://vncdn.ahamove.com/ahamoveimg/aha-service/bike-eco.png', points: 10, width: 50, height: 50 },
             { src: 'https://ahamove-assets-staging.s3.ap-southeast-1.amazonaws.com/vehicles/truck_services/SV-VAN-1000.png', points: 50, width: 75, height: 55 },
             { src: 'https://vncdn.ahamove.com/ahamoveimg/icons/icon-service-sameprice.png', points: 20, width: 50, height: 50 },
             { src: 'https://vncdn.ahamove.com/ahamoveimg/aha-service/4H.jpg', points: 40, width: 50, height: 50 },
-            { src: 'https://ahamove-assets-staging.s3.ap-southeast-1.amazonaws.com/vehicles/truck_services/SV-VAN-500.png', points: 30, width: 70, height: 50 }
         ];
 
-        // Tải hình ảnh
         const driverImg = new Image();
         driverImg.src = DRIVER_IMG_URL;
-        const serviceImages = SERVICE_ICONS.map(iconData => {
-            const img = new Image();
-            img.src = iconData.src;
-            return { ...iconData, img: img };
-        });
+        const serviceImages = SERVICE_ICONS.map(d => ({ ...d, img: Object.assign(new Image(), { src: d.src }) }));
 
-        // Các biến của trò chơi
-        const driver = {
-            x: 50,
-            y: 240,
-            width: 50,
-            height: 60,
-            velocityY: 0,
-            isJumping: false
-        };
-
+        // --- CÁC BIẾN TOÀN CỤC ---
+        const BASE_WIDTH = 800;
+        const BASE_HEIGHT = 300;
+        let scaleRatio;
+        
+        let driver = {};
         let obstacles = [];
         let score = 0;
         let frame = 0;
         let gameOver = false;
-        const GROUND_Y = 240;
-        const GRAVITY = 0.6;
-        const JUMP_POWER = -15;
+        let gameStarted = false;
+        
+        let GROUND_Y, GRAVITY, JUMP_POWER, OBSTACLE_SPEED, OBSTACLE_INTERVAL;
 
-        // Xử lý sự kiện nhảy và chơi lại
-        function handleInteraction() {
-            if (gameOver) {
-                document.location.reload();
-            } else if (!driver.isJumping) {
-                driver.velocityY = JUMP_POWER;
-                driver.isJumping = true;
-            }
+        // --- CÁC HÀM CHÍNH ---
+
+        function setScaleAndVariables() {
+            const container = gameBoard.parentElement;
+            const width = container.offsetWidth;
+            const height = width * (BASE_HEIGHT / BASE_WIDTH);
+            gameBoard.width = width;
+            gameBoard.height = height;
+
+            scaleRatio = gameBoard.width / BASE_WIDTH;
+            
+            GROUND_Y = gameBoard.height - (70 * scaleRatio);
+            GRAVITY = 0.6 * scaleRatio;
+            JUMP_POWER = -15 * scaleRatio;
+            OBSTACLE_SPEED = 5 * scaleRatio;
+            OBSTACLE_INTERVAL = 150;
+
+            driver = {
+                x: 50 * scaleRatio,
+                y: GROUND_Y,
+                width: 50 * scaleRatio,
+                height: 60 * scaleRatio,
+                velocityY: 0,
+                isJumping: false
+            };
         }
 
-        document.addEventListener('keydown', (event) => {
-            if (event.code === 'Space' || event.code === 'ArrowUp') {
-                handleInteraction();
-            }
-        });
-        gameBoard.addEventListener('click', handleInteraction);
-
+        function handleJump() {
+            if (gameOver || driver.isJumping) return;
+            driver.velocityY = JUMP_POWER;
+            driver.isJumping = true;
+        }
 
         function createObstacle() {
             const randomService = serviceImages[Math.floor(Math.random() * serviceImages.length)];
-            const obstacle = {
+            const scaledWidth = randomService.width * scaleRatio;
+            const scaledHeight = randomService.height * scaleRatio;
+            obstacles.push({
                 x: gameBoard.width,
-                y: GROUND_Y + (60 - randomService.height),
-                width: randomService.width,
-                height: randomService.height,
+                y: GROUND_Y + (driver.height - scaledHeight),
+                width: scaledWidth,
+                height: scaledHeight,
                 points: randomService.points,
                 img: randomService.img,
                 passed: false
-            };
-            obstacles.push(obstacle);
+            });
+        }
+
+        // --- CÁC HÀM VẼ (DRAW) ---
+
+        function drawStartScreen() {
+            ctx.fillStyle = '#AD0025';
+            ctx.textAlign = 'center';
+            ctx.font = `bold ${20 * scaleRatio}px 'Segoe UI'`;
+            ctx.fillText('Chạm hoặc nhấn Space để bắt đầu', gameBoard.width / 2, gameBoard.height / 2);
         }
 
         function drawGameOver() {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(0, 0, gameBoard.width, gameBoard.height);
-
             ctx.fillStyle = 'white';
-            ctx.font = '40px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('GAME OVER', gameBoard.width / 2, gameBoard.height / 2 - 20);
-
-            ctx.font = '24px Arial';
-            ctx.fillText(`Điểm của bạn: ${score}`, gameBoard.width / 2, gameBoard.height / 2 + 20);
-
-            ctx.font = '18px Arial';
-            ctx.fillText('Nhấn Space hoặc Click để chơi lại', gameBoard.width / 2, gameBoard.height / 2 + 60);
+            ctx.font = `bold ${40 * scaleRatio}px Arial`;
+            ctx.fillText('GAME OVER', gameBoard.width / 2, gameBoard.height / 2 - 20 * scaleRatio);
+            ctx.font = `bold ${24 * scaleRatio}px Arial`;
+            ctx.fillText(`Điểm của bạn: ${score}`, gameBoard.width / 2, gameBoard.height / 2 + 20 * scaleRatio);
+            ctx.font = `${18 * scaleRatio}px Arial`;
+            ctx.fillText('Chạm hoặc nhấn Space để chơi lại', gameBoard.width / 2, gameBoard.height / 2 + 60 * scaleRatio);
         }
 
-        function updateGame() {
-            if (gameOver) {
-                drawGameOver();
-                return;
-            }
-
-            frame++;
+        function drawGame() {
             ctx.clearRect(0, 0, gameBoard.width, gameBoard.height);
-
-            // --- CẬP NHẬT VÀ VẼ TÀI XẾ ---
+            
+            // Vẽ tài xế
             driver.velocityY += GRAVITY;
             driver.y += driver.velocityY;
-
             if (driver.y > GROUND_Y) {
                 driver.y = GROUND_Y;
                 driver.isJumping = false;
-                driver.velocityY = 0;
             }
-            
-            // --- BẮT ĐẦU THAY ĐỔI: VẼ TÀI XẾ VỚI HƯỚNG XOAY 90 ĐỘ ---
-            ctx.save(); // 1. Lưu trạng thái canvas
-            // 2. Di chuyển gốc tọa độ vào tâm của tài xế
+            ctx.save();
             ctx.translate(driver.x + driver.width / 2, driver.y + driver.height / 2);
-            // 3. Xoay 90 độ (Math.PI / 2 radians)
             ctx.rotate(Math.PI / 2);
-            // 4. Vẽ hình ảnh tại vị trí mới, cần điều chỉnh tọa độ vì đã translate
             ctx.drawImage(driverImg, -driver.width / 2, -driver.height / 2, driver.width, driver.height);
-            ctx.restore(); // 5. Khôi phục lại trạng thái, để không ảnh hưởng các đối tượng khác
-            // --- KẾT THÚC THAY ĐỔI ---
+            ctx.restore();
 
-            // --- TẠO VÀ CẬP NHẬT CHƯỚNG NGẠI VẬT ---
-            if (frame % 150 === 0) {
-                createObstacle();
-            }
-
-            for (let i = obstacles.length - 1; i >= 0; i--) {
-                const obs = obstacles[i];
-                obs.x -= 5;
+            // Vẽ chướng ngại vật
+            if (frame % OBSTACLE_INTERVAL === 0) createObstacle();
+            obstacles.forEach(obs => {
+                obs.x -= OBSTACLE_SPEED;
                 ctx.drawImage(obs.img, obs.x, obs.y, obs.width, obs.height);
 
+                // Tính điểm
                 if (obs.x + obs.width < driver.x && !obs.passed) {
                     score += obs.points;
                     obs.passed = true;
                 }
 
                 // Kiểm tra va chạm
-                const hitboxPadding = 5;
-                if (
-                    driver.x < obs.x + obs.width - hitboxPadding &&
-                    driver.x + driver.width > obs.x + hitboxPadding &&
-                    driver.y < obs.y + obs.height - hitboxPadding &&
-                    driver.y + driver.height > obs.y + hitboxPadding
-                ) {
+                const hitbox = 5 * scaleRatio;
+                if (driver.x < obs.x + obs.width - hitbox && driver.x + driver.width > obs.x + hitbox &&
+                    driver.y < obs.y + obs.height - hitbox && driver.y + driver.height > obs.y + hitbox) {
                     gameOver = true;
                 }
+            });
+            obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
 
-                if (obs.x + obs.width < 0) {
-                    obstacles.splice(i, 1);
-                }
-            }
-
-            // --- VẼ ĐIỂM SỐ VÀ MẶT ĐẤT ---
-            ctx.beginPath();
-            ctx.moveTo(0, GROUND_Y + 60);
-            ctx.lineTo(gameBoard.width, GROUND_Y + 60);
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            ctx.fillStyle = 'black';
-            ctx.textAlign = 'left';
-            ctx.font = '24px Arial';
-            ctx.fillText('Điểm: ' + score, 10, 30);
+            // --- PHẦN SỬA LỖI ---
+            // Vẽ mặt đất và điểm
+            const groundLineHeight = 5 * scaleRatio; // Độ dày của đường kẻ đất
+            ctx.fillStyle = '#333'; // Màu xám đậm cho mặt đất
+            ctx.fillRect(0, GROUND_Y + driver.height, gameBoard.width, groundLineHeight);
             
-            requestAnimationFrame(updateGame);
+            // Vẽ điểm
+            ctx.fillStyle = 'black'; // Đặt lại màu cho chữ
+            ctx.textAlign = 'left';
+            ctx.font = `bold ${24 * scaleRatio}px Arial`;
+            ctx.fillText('Điểm: ' + score, 10 * scaleRatio, 30 * scaleRatio);
         }
-
-        // Đảm bảo tất cả hình ảnh được tải xong trước khi bắt đầu game
-        let imagesLoaded = 0;
-        const totalImages = serviceImages.length + 1;
         
-        const onImageLoad = () => {
-            imagesLoaded++;
-            if (imagesLoaded === totalImages) {
-                ctx.fillStyle = '#AD0025';
-                ctx.font = '24px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Nhấn Space hoặc Click để bắt đầu', gameBoard.width / 2, gameBoard.height / 2);
-            }
-        };
+        // --- VÒNG LẶP CHÍNH ---
 
-        let gameStarted = false;
-        function startGame() {
-            if (!gameStarted) {
-                gameStarted = true;
-                updateGame();
+        function gameLoop() {
+            if (gameOver) {
+                drawGameOver();
+                return;
             }
+            frame++;
+            drawGame();
+            requestAnimationFrame(gameLoop);
         }
-        document.addEventListener('keydown', startGame, { once: true });
-        gameBoard.addEventListener('click', startGame, { once: true });
 
+        // --- KHỞI TẠO VÀ SỰ KIỆN ---
 
-        driverImg.onload = onImageLoad;
-        serviceImages.forEach(service => service.img.onload = onImageLoad);
+        function startGame() {
+            gameStarted = true;
+            requestAnimationFrame(gameLoop);
+        }
+
+        function handleInteraction(e) {
+            e.preventDefault();
+            if (gameOver) {
+                document.location.reload();
+                return;
+            }
+            if (!gameStarted) {
+                startGame();
+            }
+            handleJump();
+        }
+        
+        window.addEventListener('resize', () => {
+            if (gameStarted) document.location.reload();
+            else {
+                setScaleAndVariables();
+                drawStartScreen();
+            }
+        });
+
+        // Đảm bảo tất cả hình ảnh đã tải xong
+        let loadedImages = 0;
+        const allImages = [driverImg, ...serviceImages.map(s => s.img)];
+        allImages.forEach(img => {
+            img.onload = () => {
+                loadedImages++;
+                if (loadedImages === allImages.length) {
+                    setScaleAndVariables();
+                    drawStartScreen();
+                    // Gắn sự kiện sau khi mọi thứ đã sẵn sàng
+                    document.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') handleInteraction(e); });
+                    gameBoard.addEventListener('click', handleInteraction);
+                    gameBoard.addEventListener('touchstart', handleInteraction);
+                }
+            };
+        });
 
     </script>
 </body>
