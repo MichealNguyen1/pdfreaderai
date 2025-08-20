@@ -3,576 +3,229 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chatbot Thư Ký RAG</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons CDN -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <title>Game Tài Xế Ahamove</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body {
-            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f7f7f7;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            flex-direction: column;
         }
-        /* Custom styles for scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
+        #game-board {
+            border: 2px solid #AD0025; /* Màu đỏ của Ahamove */
+            background-color: #fff;
+            cursor: pointer;
         }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #555;
+        h1 {
+            margin-bottom: 20px;
+            color: #AD0025;
         }
     </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl shadow-xl p-6 w-full max-w-4xl flex flex-col lg:flex-row space-y-6 lg:space-y-0 lg:space-x-6 h-[90vh]">
-        <!-- Phần tải tài liệu -->
-        <div class="flex-1 flex flex-col bg-purple-50 rounded-2xl p-5 shadow-inner">
-            <h2 class="text-2xl font-bold text-purple-700 mb-4 flex items-center">
-                <i data-lucide="upload-cloud" class="mr-2 text-purple-600 w-7 h-7"></i> Tải tài liệu của bạn
-            </h2>
-            <p class="text-sm text-gray-600 mb-4">
-                Tải lên các tệp văn bản (.txt), hình ảnh (.png, .jpg) hoặc PDF để chatbot học từ đó.
-            </p>
-            <label
-                for="file-upload"
-                class="flex flex-col items-center justify-center p-6 border-2 border-dashed border-purple-300 rounded-xl cursor-pointer bg-purple-100 hover:bg-purple-200 transition-colors duration-300 mb-4"
-            >
-                <input
-                    id="file-upload"
-                    type="file"
-                    multiple
-                    accept=".txt,image/*,.pdf"
-                    class="hidden"
-                />
-                <i data-lucide="upload-cloud" class="text-purple-500 mb-2 w-10 h-10"></i>
-                <span class="text-purple-600 font-semibold text-center">Kéo & thả tệp hoặc nhấp để chọn</span>
-                <span class="text-xs text-gray-500 mt-1">(Hỗ trợ .txt, .png, .jpg, .pdf)</span>
-            </label>
+<body>
+    <h1>Game Tài Xế Ahamove</h1>
+    <canvas id="game-board" width="800" height="300"></canvas>
 
-            <div id="loading-indicator" class="hidden flex items-center justify-center text-purple-600 mb-4">
-                <i data-lucide="loader-2" class="animate-spin mr-2 w-5 h-5"></i>
-                Đang xử lý tệp...
-            </div>
+    <script>
+        const gameBoard = document.getElementById('game-board');
+        const ctx = gameBoard.getContext('2d');
 
-            <div class="flex-1 overflow-y-auto pr-2">
-                <h3 class="text-lg font-semibold text-purple-700 mb-3">Tài liệu đã tải lên:</h3>
-                <ul id="uploaded-files-list" class="space-y-2">
-                    <p id="no-files-message" class="text-gray-500 text-sm">Chưa có tài liệu nào được tải lên.</p>
-                </ul>
-            </div>
-            <!-- User ID display is removed as it's not needed without Firebase Auth -->
-        </div>
+        // --- CÀI ĐẶT HÌNH ẢNH ---
+        const DRIVER_IMG_URL = 'https://ahamoveimg.s3-ap-southeast-1.amazonaws.com/core_services/xe1-02.png';
 
-        <!-- Phần Chatbot -->
-        <div class="flex-1 flex flex-col bg-blue-50 rounded-2xl p-5 shadow-inner">
-            <h2 class="text-2xl font-bold text-blue-700 mb-4 flex items-center">
-                <i data-lucide="message-square" class="mr-2 text-blue-600 w-7 h-7"></i> Chatbot thư ký của bạn
-            </h2>
-            <div id="chat-history" class="flex-1 bg-white rounded-xl p-4 overflow-y-auto shadow-md mb-4 flex flex-col space-y-3">
-                <div id="no-chat-message" class="flex flex-col items-center justify-center h-full text-gray-500 text-center">
-                    <i data-lucide="bot" class="text-blue-400 mb-3 w-12 h-12"></i>
-                    <p>Chào bạn! Hãy tải lên tài liệu và bắt đầu hỏi tôi nhé.</p>
-                </div>
-            </div>
+        const SERVICE_ICONS = [
+            { src: 'https://ahamove-assets-staging.s3.ap-southeast-1.amazonaws.com/vehicles/truck_services/SV-VAN-500.png', points: 30, width: 70, height: 50 },
+            { src: 'https://vncdn.ahamove.com/ahamoveimg/aha-service/bike-eco.png', points: 10, width: 50, height: 50 },
+            { src: 'https://ahamove-assets-staging.s3.ap-southeast-1.amazonaws.com/vehicles/truck_services/SV-VAN-1000.png', points: 50, width: 75, height: 55 },
+            { src: 'https://vncdn.ahamove.com/ahamoveimg/icons/icon-service-sameprice.png', points: 20, width: 50, height: 50 },
+            { src: 'https://vncdn.ahamove.com/ahamoveimg/aha-service/4H.jpg', points: 40, width: 50, height: 50 },
+            { src: 'https://ahamove-assets-staging.s3.ap-southeast-1.amazonaws.com/vehicles/truck_services/SV-VAN-500.png', points: 30, width: 70, height: 50 }
+        ];
 
-            <div class="flex items-center space-x-3">
-                <input
-                    type="text"
-                    id="user-message-input"
-                    placeholder="Hỏi chatbot về tài liệu của bạn..."
-                    class="flex-1 p-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200"
-                />
-                <button
-                    id="send-message-button"
-                    class="bg-blue-500 text-white p-3 rounded-full shadow-lg hover:bg-blue-600 transition-colors duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <i data-lucide="send" class="w-6 h-6"></i>
-                    <i data-lucide="loader-2" class="animate-spin w-6 h-6 hidden"></i>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <script type="module">
-        // Global variables
-        let uploadedFiles = []; // Array to store processed file contents
-        let chatHistory = []; // Local array to store chat history
-        let isLoading = false; // Global loading state
-
-        // pdf.js library reference
-        let pdfjsLib = null;
-
-        // DOM element references (declared globally to be accessible by all functions)
-        let chatHistoryDiv;
-        let noChatMessage;
-        let uploadedFilesList;
-        let noFilesMessage;
-        let loadingIndicator;
-        let sendButton;
-        let sendButtonIcon;
-        let sendButtonLoader;
-        let fileInput;
-        let messageInput;
-
-        // Utility function to convert ArrayBuffer to Base64
-        function arrayBufferToBase64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            return window.btoa(binary);
-        }
-
-        // Function to update loading state
-        function updateLoadingState(loading) {
-            isLoading = loading;
-            
-            if (loadingIndicator) {
-                if (isLoading) {
-                    loadingIndicator.classList.remove('hidden');
-                } else {
-                    loadingIndicator.classList.add('hidden');
-                }
-            }
-
-            if (sendButton) {
-                const messageInputValue = messageInput ? messageInput.value.trim() : '';
-                // No need for isAuthReady as Firebase is removed
-                sendButton.disabled = isLoading || !messageInputValue;
-                if (sendButtonIcon) {
-                    if (isLoading) {
-                        sendButtonIcon.classList.add('hidden');
-                    } else {
-                        sendButtonIcon.classList.remove('hidden');
-                    }
-                }
-                if (sendButtonLoader) {
-                    if (isLoading) {
-                        sendButtonLoader.classList.remove('hidden');
-                    } else {
-                        sendButtonLoader.classList.add('hidden');
-                    }
-                }
-            }
-            
-            if (fileInput) fileInput.disabled = isLoading;
-            if (messageInput) messageInput.disabled = isLoading;
-        }
-
-        // Function to render uploaded files
-        function renderUploadedFiles() {
-            if (!uploadedFilesList || !noFilesMessage) {
-                console.error("DOM elements for uploaded files not found during render. This should not happen if initialized correctly.");
-                return;
-            }
-
-            uploadedFilesList.innerHTML = ''; // Clear existing list
-
-            if (uploadedFiles.length === 0) {
-                noFilesMessage.classList.remove('hidden');
-                uploadedFilesList.appendChild(noFilesMessage);
-            } else {
-                noFilesMessage.classList.add('hidden');
-                uploadedFiles.forEach(file => {
-                    const listItem = document.createElement('li');
-                    listItem.className = 'flex items-center bg-white p-3 rounded-lg shadow-sm text-sm';
-                    const icon = document.createElement('i');
-                    icon.setAttribute('data-lucide', file.type === 'text' ? 'file-text' : 'image');
-                    icon.className = `mr-2 ${file.type === 'text' ? 'text-blue-500' : 'text-green-500'} w-[18px] h-[18px]`;
-                    listItem.appendChild(icon);
-
-                    const fileNameSpan = document.createElement('span');
-                    fileNameSpan.className = 'truncate flex-1';
-                    fileNameSpan.textContent = file.name;
-                    listItem.appendChild(fileNameSpan);
-
-                    const fileTypeSpan = document.createElement('span');
-                    fileTypeSpan.className = 'text-gray-500 ml-2';
-                    fileTypeSpan.textContent = `(${file.type === 'text' ? 'Văn bản' : 'Hình ảnh'})`;
-                    listItem.appendChild(fileTypeSpan);
-
-                    uploadedFilesList.appendChild(listItem);
-                });
-            }
-            // Re-render lucide icons after DOM manipulation
-            lucide.createIcons();
-        }
-
-        // Function to render chat history
-        function renderChatHistory() {
-            if (!chatHistoryDiv || !noChatMessage) {
-                console.error("DOM elements for chat history not found during render. This should not happen if initialized correctly.");
-                return;
-            }
-
-            chatHistoryDiv.innerHTML = ''; // Clear existing messages
-
-            if (chatHistory.length === 0) {
-                noChatMessage.classList.remove('hidden');
-                chatHistoryDiv.appendChild(noChatMessage);
-            } else {
-                noChatMessage.classList.add('hidden');
-                chatHistory.forEach(msg => {
-                    const messageContainer = document.createElement('div');
-                    messageContainer.className = `flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`;
-
-                    const messageBubble = document.createElement('div');
-                    messageBubble.className = `flex items-start max-w-[80%] p-3 rounded-xl shadow-sm ${
-                        msg.role === 'user'
-                            ? 'bg-blue-500 text-white rounded-br-none'
-                            : 'bg-gray-200 text-gray-800 rounded-tl-none'
-                    }`;
-
-                    if (msg.role === 'model') {
-                        const botIcon = document.createElement('i');
-                        botIcon.setAttribute('data-lucide', 'bot');
-                        botIcon.className = 'mr-2 text-blue-600 w-5 h-5';
-                        messageBubble.appendChild(botIcon);
-                    }
-
-                    const messageText = document.createElement('p');
-                    messageText.className = 'whitespace-pre-wrap';
-                    messageText.textContent = msg.text;
-                    messageBubble.appendChild(messageText);
-
-                    if (msg.role === 'user') {
-                        const userIcon = document.createElement('i');
-                        userIcon.setAttribute('data-lucide', 'user');
-                        userIcon.className = 'ml-2 text-white w-5 h-5';
-                        messageBubble.appendChild(userIcon);
-                    }
-
-                    messageContainer.appendChild(messageBubble);
-                    chatHistoryDiv.appendChild(messageContainer);
-                });
-            }
-            // Re-render lucide icons after DOM manipulation
-            lucide.createIcons();
-            chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight; // Auto-scroll
-        }
-
-        // Function to generate image description using Gemini API
-        async function generateImageDescription(base64ImageData) {
-            const prompt = "Mô tả chi tiết nội dung của hình ảnh này.";
-            // LƯU Ý: Khi chạy cục bộ, bạn cần điền khóa API Gemini của mình vào đây.
-            // Trong môi trường Canvas, khóa này được tự động cung cấp.
-            const apiKey = "AIzaSyDrGY6MODlU735YSdYIkB_G1FqaRo1Na1g"; // <--- ĐIỀN KHÓA API GEMINI CỦA BẠN VÀO ĐÂY KHI CHẠY CỤC BỘ
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-            const payload = {
-                contents: [
-                    {
-                        role: "user",
-                        parts: [
-                            { text: prompt },
-                            {
-                                inlineData: {
-                                    mimeType: "image/png",
-                                    data: base64ImageData
-                                }
-                            }
-                        ]
-                    }
-                ],
-            };
-            
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json();
-                if (result.candidates && result.candidates.length > 0 &&
-                    result.candidates[0].content && result.candidates[0].content.parts &&
-                    result.candidates[0].content.parts.length > 0) {
-                    return result.candidates[0].content.parts[0].text;
-                } else {
-                    console.error("Cấu trúc phản hồi không mong muốn hoặc nội dung bị thiếu:", result);
-                    return "Không thể mô tả hình ảnh.";
-                }
-            } catch (error) {
-                console.error("Lỗi khi gọi API Gemini để mô tả hình ảnh:", error);
-                return "Lỗi khi mô tả hình ảnh.";
-            }
-        }
-
-        // Handle file change event
-        async function handleFileChange(event) {
-            const files = Array.from(event.target.files);
-            if (files.length === 0) return;
-
-            updateLoadingState(true);
-            const newUploadedFiles = [];
-
-            for (const file of files) {
-                try {
-                    if (file.type.startsWith('image/')) {
-                        const reader = new FileReader();
-                        reader.readAsDataURL(file);
-                        await new Promise((resolve) => {
-                            reader.onload = async () => {
-                                const base64ImageData = reader.result.split(',')[1];
-                                const description = await generateImageDescription(base64ImageData);
-                                newUploadedFiles.push({
-                                    id: Date.now() + '-' + file.name,
-                                    name: file.name,
-                                    type: 'image',
-                                    content: description
-                                });
-                                resolve();
-                            };
-                        });
-                    } else if (file.type === 'application/pdf') {
-                        if (!pdfjsLib) {
-                            console.error("pdf.js chưa được tải. Vui lòng thử lại.");
-                            displayMessageBox("Lỗi", "Thư viện PDF chưa được tải hoàn tất. Vui lòng thử lại sau vài giây hoặc đảm bảo bạn đang chạy ứng dụng trên máy chủ web (ví dụ: http://localhost).");
-                            continue;
-                        }
-
-                        const reader = new FileReader();
-                        reader.readAsArrayBuffer(file);
-                        await new Promise((resolve) => {
-                            reader.onload = async () => {
-                                const arrayBuffer = reader.result;
-                                try {
-                                    const pdfDocument = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                                    let fullText = '';
-                                    for (let i = 1; i <= pdfDocument.numPages; i++) {
-                                        const page = await pdfDocument.getPage(i);
-                                        const textContent = await page.getTextContent();
-                                        const pageText = textContent.items.map(item => item.str).join(' ');
-                                        fullText += pageText + '\n\n';
-                                    }
-                                    newUploadedFiles.push({
-                                        id: Date.now() + '-' + file.name,
-                                        name: file.name,
-                                        type: 'text',
-                                        content: fullText
-                                    });
-                                } catch (pdfError) {
-                                    console.error(`Lỗi khi xử lý PDF ${file.name}:`, pdfError);
-                                    displayMessageBox("Lỗi", `Không thể đọc tệp PDF: ${file.name}. Vui lòng đảm bảo đó là tệp PDF hợp lệ và không bị hỏng.`);
-                                }
-                                resolve();
-                            };
-                        });
-                    } else if (file.type === 'text/plain') {
-                        const reader = new FileReader();
-                        reader.readAsText(file);
-                        await new Promise((resolve) => {
-                            reader.onload = () => {
-                                newUploadedFiles.push({
-                                    id: Date.now() + '-' + file.name,
-                                    name: file.name,
-                                    type: 'text',
-                                    content: reader.result
-                                });
-                                resolve();
-                            };
-                        });
-                    } else {
-                        console.warn(`Loại tệp không được hỗ trợ: ${file.type}. Chỉ hỗ trợ hình ảnh, văn bản (.txt) và PDF.`);
-                        displayMessageBox("Cảnh báo", `Loại tệp không được hỗ trợ: ${file.name}. Chỉ hỗ trợ hình ảnh, văn bản (.txt) và PDF.`);
-                    }
-                } catch (error) {
-                    console.error(`Lỗi khi xử lý tệp ${file.name}:`, error);
-                }
-            }
-            uploadedFiles = [...uploadedFiles, ...newUploadedFiles];
-            renderUploadedFiles();
-            updateLoadingState(false);
-        }
-
-        // Handle send message event
-        async function handleSendMessage() {
-            const messageText = messageInput.value.trim();
-
-            if (!messageText || isLoading) return; // No need for isAuthReady
-
-            messageInput.value = '';
-            updateLoadingState(true);
-
-            // Add user message to local chat history
-            chatHistory.push({
-                role: 'user',
-                text: messageText,
-                timestamp: Date.now() // Use local timestamp
-            });
-            renderChatHistory(); // Render updated history
-
-            // Prepare context from uploaded documents
-            let context = uploadedFiles.map(file => {
-                if (file.type === 'text') {
-                    return `Tài liệu văn bản (${file.name}): ${file.content}`;
-                } else if (file.type === 'image') {
-                    return `Mô tả hình ảnh (${file.name}): ${file.content}`;
-                }
-                return '';
-            }).join('\n\n');
-
-            if (context.trim() === '') {
-                context = "Chưa có tài liệu nào được tải lên. Vui lòng tải lên tài liệu để chatbot có thể trả lời.";
-            }
-
-            // Build prompt for Gemini model
-            const prompt = `Bạn là một trợ lý chatbot thân thiện và hữu ích. Dựa trên các tài liệu sau đây, hãy trả lời câu hỏi của người dùng. CHỈ TRẢ LỜI DỰA TRÊN THÔNG TIN ĐƯỢC CUNG CẤP TRONG TÀI LIỆU. NẾU THÔNG TIN KHÔNG CÓ TRONG TÀI LIỆU, HÃY NÓI RẰNG BẠN KHÔNG CÓ THÔNG TIN ĐÓ VÀ KHÔNG THÊM BẤT BẤT KỲ DỮ LIỆU NÀO KHÁC.
-
-            Tài liệu:
-            ${context}
-
-            Câu hỏi của người dùng: ${messageText}`;
-
-            const chatHistoryForAPI = [{ role: "user", parts: [{ text: prompt }] }];
-            const payload = { contents: chatHistoryForAPI };
-            // LƯU Ý: Khi chạy cục bộ, bạn cần điền khóa API Gemini của mình vào đây.
-            // Trong môi trường Canvas, khóa này được tự động cung cấp.
-            const apiKey = "AIzaSyDrGY6MODlU735YSdYIkB_G1FqaRo1Na1g"; // <--- ĐIỀN KHÓA API GEMINI CỦA BẠN VÀO ĐÂY KHI CHẠY CỤC BỘ
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                let result;
-                try {
-                    result = await response.json();
-                } catch (jsonError) {
-                    console.error("Lỗi khi phân tích phản hồi JSON từ Gemini:", jsonError);
-                    let errorMessage = "Đã xảy ra lỗi không mong muốn từ máy chủ.";
-                    if (!response.ok) {
-                        errorMessage = `Lỗi máy chủ: ${response.status} ${response.statusText}. Vui lòng thử lại sau.`;
-                    }
-                    chatHistory.push({
-                        role: 'model',
-                        text: errorMessage,
-                        timestamp: Date.now()
-                    });
-                    renderChatHistory();
-                    updateLoadingState(false);
-                    return;
-                }
-
-                let botResponseText = "Xin lỗi, tôi không thể tìm thấy thông tin liên quan trong các tài liệu đã tải lên.";
-                if (result.candidates && result.candidates.length > 0 &&
-                    result.candidates[0].content && result.candidates[0].content.parts &&
-                    result.candidates[0].content.parts.length > 0) {
-                    botResponseText = result.candidates[0].content.parts[0].text;
-                } else {
-                    console.error("Cấu trúc phản hồi không mong muốn từ Gemini:", result);
-                }
-
-                // Add bot response to local chat history
-                chatHistory.push({
-                    role: 'model',
-                    text: botResponseText,
-                    timestamp: Date.now()
-                });
-                renderChatHistory(); // Render updated history
-
-            } catch (error) {
-                console.error("Lỗi khi gọi API Gemini:", error);
-                chatHistory.push({
-                    role: 'model',
-                    text: "Đã xảy ra lỗi khi xử lý yêu cầu của bạn. Vui lòng thử lại sau.",
-                    timestamp: Date.now()
-                });
-                renderChatHistory();
-            } finally {
-                updateLoadingState(false);
-            }
-        }
-
-        // Custom message box function (replaces alert)
-        function displayMessageBox(title, message) {
-            const messageBoxOverlay = document.createElement('div');
-            messageBoxOverlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            messageBoxOverlay.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
-                    <h3 class="text-xl font-bold mb-4 text-gray-800">${title}</h3>
-                    <p class="text-gray-700 mb-6">${message}</p>
-                    <button id="message-box-ok" class="bg-blue-500 text-white px-6 py-2 rounded-full hover:bg-blue-600 transition-colors duration-300">OK</button>
-                </div>
-            `;
-            document.body.appendChild(messageBoxOverlay);
-
-            document.getElementById('message-box-ok').onclick = () => {
-                document.body.removeChild(messageBoxOverlay);
-            };
-        }
-
-
-        // Initialize Firebase and setup auth listener
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Get all DOM element references once here
-            chatHistoryDiv = document.getElementById('chat-history');
-            noChatMessage = document.getElementById('no-chat-message');
-            uploadedFilesList = document.getElementById('uploaded-files-list');
-            noFilesMessage = document.getElementById('no-files-message');
-            loadingIndicator = document.getElementById('loading-indicator');
-            sendButton = document.getElementById('send-message-button');
-            sendButtonIcon = sendButton ? sendButton.querySelector('[data-lucide="send"]') : null;
-            sendButtonLoader = sendButton ? sendButton.querySelector('[data-lucide="loader-2"]') : null;
-            fileInput = document.getElementById('file-upload');
-            messageInput = document.getElementById('user-message-input');
-            // userIdValueElement and userIdDisplayElement are removed as Firebase Auth is removed
-
-            // Firebase initialization and auth listeners are removed
-            // No need for isAuthReady or isFirestoreListenerReady flags
-
-            // Load pdf.js scripts
-            try {
-                const pdfjsScript = document.createElement('script');
-                pdfjsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-                pdfjsScript.onload = () => {
-                    pdfjsLib = window['pdfjs-dist/build/pdf'];
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                    console.log('pdf.js loaded successfully!');
-                };
-                pdfjsScript.onerror = (e) => {
-                    console.error("Failed to load pdf.js", e);
-                    displayMessageBox("Lỗi tải PDF", "Không thể tải thư viện PDF. Vui lòng kiểm tra kết nối internet hoặc đảm bảo bạn đang chạy ứng dụng trên máy chủ web (ví dụ: http://localhost).");
-                };
-                document.head.appendChild(pdfjsScript);
-            } catch (error) {
-                console.error("Error loading pdf.js:", error);
-            }
-
-            // Initial render of empty states
-            renderChatHistory();
-            renderUploadedFiles();
-
-            // Re-render lucide icons after all initial DOM manipulation
-            lucide.createIcons();
-
-            // Event Listeners - moved inside DOMContentLoaded
-            if (fileInput) fileInput.addEventListener('change', handleFileChange);
-            if (sendButton) sendButton.addEventListener('click', handleSendMessage);
-            if (messageInput) {
-                messageInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        handleSendMessage();
-                    }
-                });
-                messageInput.addEventListener('input', () => {
-                    updateLoadingState(isLoading); // Re-evaluate button disabled state on input
-                });
-            }
-            // Initial update of button state
-            updateLoadingState(isLoading);
+        // Tải hình ảnh
+        const driverImg = new Image();
+        driverImg.src = DRIVER_IMG_URL;
+        const serviceImages = SERVICE_ICONS.map(iconData => {
+            const img = new Image();
+            img.src = iconData.src;
+            return { ...iconData, img: img };
         });
+
+        // Các biến của trò chơi
+        const driver = {
+            x: 50,
+            y: 240,
+            width: 50,
+            height: 60,
+            velocityY: 0,
+            isJumping: false
+        };
+
+        let obstacles = [];
+        let score = 0;
+        let frame = 0;
+        let gameOver = false;
+        const GROUND_Y = 240;
+        const GRAVITY = 0.6;
+        const JUMP_POWER = -15;
+
+        // Xử lý sự kiện nhảy và chơi lại
+        function handleInteraction() {
+            if (gameOver) {
+                document.location.reload();
+            } else if (!driver.isJumping) {
+                driver.velocityY = JUMP_POWER;
+                driver.isJumping = true;
+            }
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space' || event.code === 'ArrowUp') {
+                handleInteraction();
+            }
+        });
+        gameBoard.addEventListener('click', handleInteraction);
+
+
+        function createObstacle() {
+            const randomService = serviceImages[Math.floor(Math.random() * serviceImages.length)];
+            const obstacle = {
+                x: gameBoard.width,
+                y: GROUND_Y + (60 - randomService.height),
+                width: randomService.width,
+                height: randomService.height,
+                points: randomService.points,
+                img: randomService.img,
+                passed: false
+            };
+            obstacles.push(obstacle);
+        }
+
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, gameBoard.width, gameBoard.height);
+
+            ctx.fillStyle = 'white';
+            ctx.font = '40px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER', gameBoard.width / 2, gameBoard.height / 2 - 20);
+
+            ctx.font = '24px Arial';
+            ctx.fillText(`Điểm của bạn: ${score}`, gameBoard.width / 2, gameBoard.height / 2 + 20);
+
+            ctx.font = '18px Arial';
+            ctx.fillText('Nhấn Space hoặc Click để chơi lại', gameBoard.width / 2, gameBoard.height / 2 + 60);
+        }
+
+        function updateGame() {
+            if (gameOver) {
+                drawGameOver();
+                return;
+            }
+
+            frame++;
+            ctx.clearRect(0, 0, gameBoard.width, gameBoard.height);
+
+            // --- CẬP NHẬT VÀ VẼ TÀI XẾ ---
+            driver.velocityY += GRAVITY;
+            driver.y += driver.velocityY;
+
+            if (driver.y > GROUND_Y) {
+                driver.y = GROUND_Y;
+                driver.isJumping = false;
+                driver.velocityY = 0;
+            }
+            
+            // --- BẮT ĐẦU THAY ĐỔI: VẼ TÀI XẾ VỚI HƯỚNG XOAY 90 ĐỘ ---
+            ctx.save(); // 1. Lưu trạng thái canvas
+            // 2. Di chuyển gốc tọa độ vào tâm của tài xế
+            ctx.translate(driver.x + driver.width / 2, driver.y + driver.height / 2);
+            // 3. Xoay 90 độ (Math.PI / 2 radians)
+            ctx.rotate(Math.PI / 2);
+            // 4. Vẽ hình ảnh tại vị trí mới, cần điều chỉnh tọa độ vì đã translate
+            ctx.drawImage(driverImg, -driver.width / 2, -driver.height / 2, driver.width, driver.height);
+            ctx.restore(); // 5. Khôi phục lại trạng thái, để không ảnh hưởng các đối tượng khác
+            // --- KẾT THÚC THAY ĐỔI ---
+
+            // --- TẠO VÀ CẬP NHẬT CHƯỚNG NGẠI VẬT ---
+            if (frame % 150 === 0) {
+                createObstacle();
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.x -= 5;
+                ctx.drawImage(obs.img, obs.x, obs.y, obs.width, obs.height);
+
+                if (obs.x + obs.width < driver.x && !obs.passed) {
+                    score += obs.points;
+                    obs.passed = true;
+                }
+
+                // Kiểm tra va chạm
+                const hitboxPadding = 5;
+                if (
+                    driver.x < obs.x + obs.width - hitboxPadding &&
+                    driver.x + driver.width > obs.x + hitboxPadding &&
+                    driver.y < obs.y + obs.height - hitboxPadding &&
+                    driver.y + driver.height > obs.y + hitboxPadding
+                ) {
+                    gameOver = true;
+                }
+
+                if (obs.x + obs.width < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            // --- VẼ ĐIỂM SỐ VÀ MẶT ĐẤT ---
+            ctx.beginPath();
+            ctx.moveTo(0, GROUND_Y + 60);
+            ctx.lineTo(gameBoard.width, GROUND_Y + 60);
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = 'black';
+            ctx.textAlign = 'left';
+            ctx.font = '24px Arial';
+            ctx.fillText('Điểm: ' + score, 10, 30);
+            
+            requestAnimationFrame(updateGame);
+        }
+
+        // Đảm bảo tất cả hình ảnh được tải xong trước khi bắt đầu game
+        let imagesLoaded = 0;
+        const totalImages = serviceImages.length + 1;
+        
+        const onImageLoad = () => {
+            imagesLoaded++;
+            if (imagesLoaded === totalImages) {
+                ctx.fillStyle = '#AD0025';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Nhấn Space hoặc Click để bắt đầu', gameBoard.width / 2, gameBoard.height / 2);
+            }
+        };
+
+        let gameStarted = false;
+        function startGame() {
+            if (!gameStarted) {
+                gameStarted = true;
+                updateGame();
+            }
+        }
+        document.addEventListener('keydown', startGame, { once: true });
+        gameBoard.addEventListener('click', startGame, { once: true });
+
+
+        driverImg.onload = onImageLoad;
+        serviceImages.forEach(service => service.img.onload = onImageLoad);
+
     </script>
 </body>
-</html>
+</html>```
